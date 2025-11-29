@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Dashboard Riego ESP32</title>
+<style>
+body {
+    font-family: Arial; 
+    background: #111;
+    color: #eee;
+    text-align: center;
+}
+.box {
+    margin: 20px auto;
+    padding: 20px;
+    width: 300px;
+    background: #222;
+    border-radius: 10px;
+}
+.value {
+    font-size: 40px;
+    margin-top: 10px;
+}
+</style>
+</head>
+
+<body>
+
+<h2>🌱 Dashboard del ESP32</h2>
+
+<div class="box">
+    <h3>Temperatura</h3>
+    <div id="temp" class="value">-- °C</div>
+</div>
+
+<div class="box">
+    <h3>Humedad Ambiente</h3>
+    <div id="hum" class="value">-- %</div>
+</div>
+
+<div class="box">
+    <h3>Estado del Riego</h3>
+    <div id="status" class="value">---</div>
+</div>
+
+<script src="https://unpkg.com/paho-mqtt/mqttws31.min.js"></script>
+<script>
+// ---------------- MQTT CONFIG ----------------
+const clientID = "dashboard_" + parseInt(Math.random()*10000);
+const client = new Paho.MQTT.Client("broker.emqx.io", 8083, clientID);
+
+// al conectar
+client.connect({
+    useSSL: true,
+    onSuccess: () => {
+        console.log("Conectado a EMQX via WebSocket");
+
+        client.subscribe("esp32/temperatura");
+        client.subscribe("esp32/humedad");
+        client.subscribe("esp32/riego/status");
+    },
+    onFailure: (e) => console.log("Error:", e)
+});
+
+// cuando llega un mensaje
+client.onMessageArrived = (msg) => {
+    console.log(msg.destinationName, msg.payloadString);
+
+    if (msg.destinationName === "esp32/temperatura")
+        document.getElementById("temp").innerHTML = msg.payloadString + " °C";
+
+    if (msg.destinationName === "esp32/humedad")
+        document.getElementById("hum").innerHTML = msg.payloadString + " %";
+
+    if (msg.destinationName === "esp32/riego/status")
+        document.getElementById("status").innerHTML = msg.payloadString;
+};
+</script>
+
+</body>
+</html>
