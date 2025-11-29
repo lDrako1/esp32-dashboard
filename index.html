@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <title>Dashboard Riego ESP32</title>
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <style>
 body {
     font-family: Arial; 
@@ -43,39 +44,35 @@ body {
     <div id="status" class="value">---</div>
 </div>
 
-<script src="https://unpkg.com/paho-mqtt/mqttws31.min.js"></script>
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
 <script>
-// ---------------- MQTT CONFIG ----------------
-const clientID = "dashboard_" + parseInt(Math.random()*10000);
-const client = new Paho.MQTT.Client("broker.emqx.io", 8083, clientID);
+// Conectar a WebSockets MQTT
+const client = mqtt.connect("wss://broker.emqx.io:8084/mqtt");
 
-// al conectar
-client.connect({
-    useSSL: true,
-    onSuccess: () => {
-        console.log("Conectado a EMQX via WebSocket");
+client.on("connect", function () {
+    console.log("Conectado a MQTT");
 
-        client.subscribe("esp32/temperatura");
-        client.subscribe("esp32/humedad");
-        client.subscribe("esp32/riego/status");
-    },
-    onFailure: (e) => console.log("Error:", e)
+    client.subscribe("esp32/temperatura");
+    client.subscribe("esp32/humedad");
+    client.subscribe("esp32/riego/status");
 });
 
-// cuando llega un mensaje
-client.onMessageArrived = (msg) => {
-    console.log(msg.destinationName, msg.payloadString);
+client.on("message", function (topic, message) {
+    let data = message.toString();
 
-    if (msg.destinationName === "esp32/temperatura")
-        document.getElementById("temp").innerHTML = msg.payloadString + " °C";
-
-    if (msg.destinationName === "esp32/humedad")
-        document.getElementById("hum").innerHTML = msg.payloadString + " %";
-
-    if (msg.destinationName === "esp32/riego/status")
-        document.getElementById("status").innerHTML = msg.payloadString;
-};
+    if (topic === "esp32/temperatura") {
+        document.getElementById("temp").innerText = data + " °C";
+    }
+    if (topic === "esp32/humedad") {
+        document.getElementById("hum").innerText = data + " %";
+    }
+    if (topic === "esp32/riego/status") {
+        document.getElementById("status").innerText = data;
+    }
+});
 </script>
 
 </body>
 </html>
+
