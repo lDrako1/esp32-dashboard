@@ -4,61 +4,184 @@
 <meta charset="utf-8" />
 <title>Dashboard Riego ESP32</title>
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
 <style>
 body {
-    font-family: Arial; 
+    font-family: Arial;
     background: #111;
     color: #eee;
-    text-align: center;
+    margin: 0;
+    padding: 20px;
 }
+
+.container {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+}
+
+/* Caja de sensores */
 .box {
-    margin: 20px auto;
+    background: #222;
     padding: 20px;
     width: 300px;
-    background: #222;
     border-radius: 10px;
 }
+
 .value {
-    font-size: 40px;
-    margin-top: 10px;
+    font-size: 32px;
+    margin: 5px 0;
+}
+
+/* Caja modo */
+.mode-box {
+    background: #222;
+    padding: 20px;
+    width: 220px;
+    border-radius: 10px;
+    text-align: center;
+}
+
+.mode-box .devices{
+    margin-top: 15px;
+    display: none;
+    text-align: left;
+    padding: 10px;
+    background: #1a1a1a;
+    border-radius: 10px;
+}
+
+/* Switch tipo iPhone */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 55px;
+  height: 28px;
+}
+
+.switch input { display:none; }
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #555;
+  transition: .4s;
+  border-radius: 34px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 22px;
+  width: 22px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #27ae60;
+}
+
+input:checked + .slider:before {
+  transform: translateX(26px);
+}
+
+/* Panel de cargas */
+.devices {
+    margin-top: 20px;
+    background: #222;
+    padding: 20px;
+    border-radius: 10px;
+    display: none; /* oculto hasta MANUAL */
+}
+.device-row {
+    margin: 15px 0;
 }
 </style>
 </head>
 
 <body>
 
-<h2>🌱 Dashboard del ESP32</h2>
+<h2 style="text-align:center;">🌱 Dashboard del ESP32</h2>
 
-<div class="box">
-    <h3>Temperatura</h3>
-    <div id="temp" class="value">-- °C</div>
+<div class="container">
+
+    <!-- BOX SENSORES -->
+    <div class="box">
+        <h3>Sensores</h3>
+
+        <p>Temperatura:</p>
+        <div id="temp" class="value">-- °C</div>
+
+        <p>Humedad Ambiente:</p>
+        <div id="hum" class="value">-- %</div>
+
+        <p>Humedad Suelo:</p>
+        <div id="soil" class="value">-- %</div>
+    </div>
+
+    <!-- BOX MODO -->
+    <div class="mode-box">
+        <h3>Modo</h3>
+
+        <label class="switch">
+          <input type="checkbox" id="modeSwitch">
+          <span class="slider"></span>
+        </label>
+
+        <p id="modeLabel">AUTO</p>
+
+        <div class="devices" id="manualPanel">
+            <h3>Control Manual</h3>
+
+            <div class="device-row">
+                Foco
+                <label class="switch" style="float:right;">
+                  <input type="checkbox" id="swFoco">
+                  <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="device-row">
+                Ventilador
+                <label class="switch" style="float:right;">
+                  <input type="checkbox" id="swVent">
+                  <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="device-row">
+                Bomba
+                <label class="switch" style="float:right;">
+                  <input type="checkbox" id="swBomba">
+                  <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+    </div>
 </div>
 
-<div class="box">
-    <h3>Humedad Ambiente</h3>
-    <div id="hum" class="value">-- %</div>
-</div>
 
-<div class="box">
-    <h3>Estado del Riego</h3>
-    <div id="status" class="value">---</div>
-</div>
-
-<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
 <script>
-// Conectar a WebSockets MQTT
+// Conectar a MQTT WebSockets
 const client = mqtt.connect("wss://broker.emqx.io:8084/mqtt");
 
-client.on("connect", function () {
-    console.log("Conectado a MQTT");
+client.on("connect", () => {
+    console.log("MQTT conectado");
 
     client.subscribe("esp32/temperatura");
     client.subscribe("esp32/humedad");
-    client.subscribe("esp32/riego/status");
+    client.subscribe("esp32/suelo");
+    client.subscribe("esp32/mode");
 });
 
-client.on("message", function (topic, message) {
+// Actualizar dashboard cuando se reciban datos
+client.on("message", (topic, message) => {
     let data = message.toString();
 
     if (topic === "esp32/temperatura") {
@@ -67,12 +190,41 @@ client.on("message", function (topic, message) {
     if (topic === "esp32/humedad") {
         document.getElementById("hum").innerText = data + " %";
     }
-    if (topic === "esp32/riego/status") {
-        document.getElementById("status").innerText = data;
+    if (topic === "esp32/suelo") {
+        document.getElementById("soil").innerText = data + " %";
     }
+    if (topic === "esp32/mode") {
+        let manual = (data === "MANUAL");
+        document.getElementById("modeSwitch").checked = manual;
+        document.getElementById("modeLabel").innerText = manual ? "MANUAL" : "AUTO";
+        document.getElementById("manualPanel").style.display = manual ? "block" : "none";
+    }
+});
+
+// Cambiar MODO
+document.getElementById("modeSwitch").addEventListener("change", function() {
+    let mode = this.checked ? "MANUAL" : "AUTO";
+    document.getElementById("modeLabel").innerText = mode;
+    document.getElementById("manualPanel").style.display = this.checked ? "block" : "none";
+
+    client.publish("esp32/mode", mode);
+});
+
+// Switch FOCO
+document.getElementById("swFoco").addEventListener("change", function(){
+    client.publish("esp32/cmd/foco", this.checked ? "ON" : "OFF");
+});
+
+// Switch VENTILADOR
+document.getElementById("swVent").addEventListener("change", function(){
+    client.publish("esp32/cmd/vent", this.checked ? "ON" : "OFF");
+});
+
+// Switch BOMBA
+document.getElementById("swBomba").addEventListener("change", function(){
+    client.publish("esp32/cmd/bomba", this.checked ? "ON" : "OFF");
 });
 </script>
 
 </body>
 </html>
-
