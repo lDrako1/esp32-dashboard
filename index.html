@@ -100,7 +100,6 @@ input:checked + .slider:before {
     margin: 15px 0;
 }
 
-/* Contenedor del gráfico */
 .chart-box {
     margin-top: 30px;
     background: #222;
@@ -116,7 +115,6 @@ input:checked + .slider:before {
 
 <div class="container">
 
-    <!-- BOX SENSORES -->
     <div class="box">
         <h3>Sensores</h3>
 
@@ -130,7 +128,6 @@ input:checked + .slider:before {
         <div id="soil" class="value">-- %</div>
     </div>
 
-    <!-- BOX MODO -->
     <div class="mode-box">
         <h3>Modo</h3>
 
@@ -171,14 +168,14 @@ input:checked + .slider:before {
     </div>
 </div>
 
-<!-- 🟦 Gráfico temperatura vs tiempo -->
+<!-- GRÁFICO -->
 <div class="chart-box">
     <h3>Temperatura vs Tiempo (minutos)</h3>
     <canvas id="tempChart" width="600" height="250"></canvas>
 </div>
 
 <script>
-// === MQTT ===
+// MQTT
 const client = mqtt.connect("wss://broker.emqx.io:8084/mqtt");
 
 client.on("connect", () => {
@@ -190,14 +187,14 @@ client.on("connect", () => {
     client.subscribe("esp32/mode");
 });
 
-// === Preparación del gráfico ===
+// === Gráfico ===
 let startTime = Date.now();
+let lastPlotTime = 0;
 
 const ctx = document.getElementById("tempChart").getContext("2d");
 const tempChart = new Chart(ctx, {
     type: "line",
     data: {
-        labels: [],
         datasets: [{
             label: "Temperatura (°C)",
             data: [],
@@ -210,6 +207,7 @@ const tempChart = new Chart(ctx, {
     options: {
         scales: {
             x: {
+                type: "linear",
                 title: { display: true, text: "Tiempo (minutos)" }
             },
             y: {
@@ -221,28 +219,37 @@ const tempChart = new Chart(ctx, {
     }
 });
 
-// === Actualizar dashboard cuando lleguen datos ===
+// === Mensajes MQTT ===
 client.on("message", (topic, message) => {
     let data = message.toString();
 
     if (topic === "esp32/temperatura") {
         document.getElementById("temp").innerText = data + " °C";
 
-        // === Agregar punto en el gráfico ===
         let now = Date.now();
-        let minutes = ((now - startTime) / 60000).toFixed(2);
 
-        tempChart.data.labels.push(minutes);
-        tempChart.data.datasets[0].data.push(parseFloat(data));
-        tempChart.update();
+        // Agregar SOLO 1 punto por minuto
+        if (now - lastPlotTime >= 60000) {
+            lastPlotTime = now;
+            let minutes = (now - startTime) / 60000;
+
+            tempChart.data.datasets[0].data.push({
+                x: minutes,
+                y: parseFloat(data)
+            });
+
+            tempChart.update();
+        }
     }
 
     if (topic === "esp32/humedad") {
         document.getElementById("hum").innerText = data + " %";
     }
+
     if (topic === "esp32/suelo") {
         document.getElementById("soil").innerText = data + " %";
     }
+
     if (topic === "esp32/mode") {
         let manual = (data === "MANUAL");
         document.getElementById("modeSwitch").checked = manual;
