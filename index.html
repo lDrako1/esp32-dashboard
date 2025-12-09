@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <title>Dashboard Riego ESP32</title>
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
 body {
@@ -20,7 +21,6 @@ body {
     gap: 20px;
 }
 
-/* Caja de sensores */
 .box {
     background: #222;
     padding: 20px;
@@ -33,7 +33,6 @@ body {
     margin: 5px 0;
 }
 
-/* Caja modo */
 .mode-box {
     background: #222;
     padding: 20px;
@@ -51,7 +50,6 @@ body {
     border-radius: 10px;
 }
 
-/* Switch tipo iPhone */
 .switch {
   position: relative;
   display: inline-block;
@@ -90,16 +88,24 @@ input:checked + .slider:before {
   transform: translateX(26px);
 }
 
-/* Panel de cargas */
 .devices {
     margin-top: 20px;
     background: #222;
     padding: 20px;
     border-radius: 10px;
-    display: none; /* oculto hasta MANUAL */
+    display: none;
 }
+
 .device-row {
     margin: 15px 0;
+}
+
+/* Contenedor del gráfico */
+.chart-box {
+    margin-top: 30px;
+    background: #222;
+    padding: 20px;
+    border-radius: 10px;
 }
 </style>
 </head>
@@ -165,10 +171,14 @@ input:checked + .slider:before {
     </div>
 </div>
 
-
+<!-- 🟦 Gráfico temperatura vs tiempo -->
+<div class="chart-box">
+    <h3>Temperatura vs Tiempo (minutos)</h3>
+    <canvas id="tempChart" width="600" height="250"></canvas>
+</div>
 
 <script>
-// Conectar a MQTT WebSockets
+// === MQTT ===
 const client = mqtt.connect("wss://broker.emqx.io:8084/mqtt");
 
 client.on("connect", () => {
@@ -180,13 +190,53 @@ client.on("connect", () => {
     client.subscribe("esp32/mode");
 });
 
-// Actualizar dashboard cuando se reciban datos
+// === Preparación del gráfico ===
+let startTime = Date.now();
+
+const ctx = document.getElementById("tempChart").getContext("2d");
+const tempChart = new Chart(ctx, {
+    type: "line",
+    data: {
+        labels: [],
+        datasets: [{
+            label: "Temperatura (°C)",
+            data: [],
+            borderColor: "#27ae60",
+            backgroundColor: "rgba(39,174,96,0.2)",
+            borderWidth: 2,
+            tension: 0.2
+        }]
+    },
+    options: {
+        scales: {
+            x: {
+                title: { display: true, text: "Tiempo (minutos)" }
+            },
+            y: {
+                title: { display: true, text: "Temperatura (°C)" },
+                suggestedMin: 0,
+                suggestedMax: 50
+            }
+        }
+    }
+});
+
+// === Actualizar dashboard cuando lleguen datos ===
 client.on("message", (topic, message) => {
     let data = message.toString();
 
     if (topic === "esp32/temperatura") {
         document.getElementById("temp").innerText = data + " °C";
+
+        // === Agregar punto en el gráfico ===
+        let now = Date.now();
+        let minutes = ((now - startTime) / 60000).toFixed(2);
+
+        tempChart.data.labels.push(minutes);
+        tempChart.data.datasets[0].data.push(parseFloat(data));
+        tempChart.update();
     }
+
     if (topic === "esp32/humedad") {
         document.getElementById("hum").innerText = data + " %";
     }
@@ -201,26 +251,20 @@ client.on("message", (topic, message) => {
     }
 });
 
-// Cambiar MODO
+// === Controles manuales ===
 document.getElementById("modeSwitch").addEventListener("change", function() {
     let mode = this.checked ? "MANUAL" : "AUTO";
     document.getElementById("modeLabel").innerText = mode;
     document.getElementById("manualPanel").style.display = this.checked ? "block" : "none";
-
     client.publish("esp32/mode", mode);
 });
 
-// Switch FOCO
 document.getElementById("swFoco").addEventListener("change", function(){
     client.publish("esp32/cmd/foco", this.checked ? "ON" : "OFF");
 });
-
-// Switch VENTILADOR
 document.getElementById("swVent").addEventListener("change", function(){
     client.publish("esp32/cmd/vent", this.checked ? "ON" : "OFF");
 });
-
-// Switch BOMBA
 document.getElementById("swBomba").addEventListener("change", function(){
     client.publish("esp32/cmd/bomba", this.checked ? "ON" : "OFF");
 });
